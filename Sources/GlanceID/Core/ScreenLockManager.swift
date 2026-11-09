@@ -8,6 +8,7 @@ final class ScreenLockManager: ObservableObject {
     @Published var isMacBookLocked: Bool = false
     private var lockWindow: NSWindow?
     private var appState: AppState?
+    private var glanceTimeoutItem: DispatchWorkItem?
     
     private init() {
         setupSystemNotifications()
@@ -18,7 +19,6 @@ final class ScreenLockManager: ObservableObject {
     }
     
     private func setupSystemNotifications() {
-        // Observe real macOS lock screen events
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleScreenLocked),
@@ -42,16 +42,16 @@ final class ScreenLockManager: ObservableObject {
     }
     
     @objc private func handleScreenLocked() {
-        DispatchQueue.main.async {
-            print("[GlanceID] Real macOS screen locked event detected.")
+        DispatchQueue.main.async { [weak self] in
+            // When real screen is locked, ensure camera is OFF
+            self?.appState?.cameraManager.stop()
         }
     }
     
     @objc private func handleScreenUnlocked() {
-        DispatchQueue.main.async {
-            print("[GlanceID] Real macOS screen unlocked event detected.")
-            if self.isMacBookLocked {
-                self.unlockMacBook()
+        DispatchQueue.main.async { [weak self] in
+            if self?.isMacBookLocked == true {
+                self?.unlockMacBook()
             }
         }
     }
@@ -59,7 +59,7 @@ final class ScreenLockManager: ObservableObject {
     @objc private func handleDisplayWake() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isMacBookLocked else { return }
-            print("[GlanceID] Screen woke up. Triggering Face ID glance...")
+            // On display wake, run a quick 2-second glance scan
             self.triggerFaceIDUnlock()
         }
     }
@@ -70,6 +70,10 @@ final class ScreenLockManager: ObservableObject {
         guard let appState = self.appState else { return }
         
         isMacBookLocked = true
+        
+        // Ensure camera is OFF on initial lock. Do not turn on camera until user interacts.
+        appState.cameraManager.stop()
+        appState.glyphState = .idle
         
         let screenRect = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let window = NSWindow(
@@ -98,17 +102,17 @@ final class ScreenLockManager: ObservableObject {
         window.makeKeyAndOrderFront(nil)
         self.lockWindow = window
         
-        // Bring to front and immediately initiate Face ID glance
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.triggerFaceIDUnlock()
-        }
     }
     
     func unlockMacBook() {
         guard isMacBookLocked else { return }
         
-        // Smooth slide up & fade out animation
+        glanceTimeoutItem?.cancel()
+        glanceTimeoutItem = nil
+        appState?.cameraManager.stop()
+        appState?.engine.reset()
+        
         if let window = lockWindow {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.35
@@ -118,19 +122,63 @@ final class ScreenLockManager: ObservableObject {
                 window.orderOut(nil)
                 self?.lockWindow = nil
                 self?.isMacBookLocked = false
-                self?.appState?.cameraManager.stop()
+                self?.appState?.glyphState = .idle
             })
         } else {
             isMacBookLocked = false
         }
     }
     
+    /// Bounded Face ID glance: runs camera for max 2.5 seconds, then immediately cuts camera power
     func triggerFaceIDUnlock() {
         guard let appState = self.appState, isMacBookLocked else { return }
+        guard appState.isEnrolled else { return }
+        guard !appState.cameraManager.isRunning else { return }
         
-        appState.triggerAuthentication { [weak self] in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                self?.unlockMacBook()
+        appState.glyphState = .scanning
+        appState.cameraManager.start()
+        
+        // Safety timeout: automatically kill camera after 2.5 seconds if no match
+        let timeoutItem = DispatchWorkItem { [weak self, weak appState] in
+            guard let self = self, let appState = appState, self.isMacBookLocked else { return }
+            if appState.glyphState == .scanning {
+                appState.cameraManager.stop()
+                appState.engine.reset()
+                appState.glyphState = .failure
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    if self.isMacBookLocked && appState.glyphState == .failure {
+                        appState.glyphState = .idle
+                    }
+                }
+            }
+        }
+        self.glanceTimeoutItem = timeoutItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: timeoutItem)
+        
+        appState.engine.startAuthentication(threshold: appState.threshold) { [weak self, weak appState] matched, dist, name in
+            guard let self = self, let appState = appState, self.isMacBookLocked else { return }
+            
+            self.glanceTimeoutItem?.cancel()
+            self.glanceTimeoutItem = nil
+            
+            // Immediately shut off camera
+            appState.cameraManager.stop()
+            
+            if matched {
+                appState.glyphState = .success
+                appState.soundManager.playFaceIDSuccess()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    self.unlockMacBook()
+                }
+            } else {
+                appState.glyphState = .failure
+                appState.soundManager.playFaceIDFailure()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    if self.isMacBookLocked {
+                        appState.glyphState = .idle
+                    }
+                }
             }
         }
     }

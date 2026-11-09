@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct FullscreenLockScreenView: View {
     @ObservedObject var appState: AppState
@@ -14,23 +15,38 @@ struct FullscreenLockScreenView: View {
         ZStack {
             // Dynamic blurred wallpaper background
             WallpaperBackgroundView()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // Clicking background initiates glance
+                    if appState.glyphState == .idle {
+                        onUnlockRequested()
+                    }
+                }
             
             VStack(spacing: 0) {
-                // Top Face ID Status Pill
-                HStack(spacing: 10) {
-                    FaceIDGlyphView(state: appState.glyphState, size: 28)
-                    Text(statusMessage)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white.opacity(0.9))
+                // Top Face ID Status Pill (Clickable)
+                Button(action: {
+                    onUnlockRequested()
+                }) {
+                    HStack(spacing: 10) {
+                        FaceIDGlyphView(state: appState.glyphState, size: 28)
+                        Text(statusMessage)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white.opacity(0.92))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(20)
+                    .overlay(
+                        Capsule()
+                            .stroke(
+                                appState.glyphState == .scanning ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.2),
+                                lineWidth: 1.5
+                            )
+                    )
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .cornerRadius(20)
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
                 .padding(.top, 40)
                 
                 Spacer()
@@ -45,7 +61,7 @@ struct FullscreenLockScreenView: View {
                         .font(.system(size: 22, weight: .medium))
                         .foregroundColor(.white.opacity(0.85))
                 }
-                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
+                .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 4)
                 
                 Spacer()
                 
@@ -69,7 +85,7 @@ struct FullscreenLockScreenView: View {
                         .font(.title2.bold())
                         .foregroundColor(.white)
                     
-                    // Fallback Password input or Face ID button
+                    // Fallback Password input
                     HStack(spacing: 8) {
                         SecureField("Enter Password", text: $passwordInput)
                             .textFieldStyle(.plain)
@@ -97,20 +113,27 @@ struct FullscreenLockScreenView: View {
                             .stroke(showPasswordError ? Color.red : Color.white.opacity(0.25), lineWidth: 1)
                     )
                     
-                    // Face ID retry button
+                    // Face ID Trigger Button
                     Button(action: {
                         onUnlockRequested()
                     }) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: "faceid")
-                            Text("Glance to Unlock")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(appState.glyphState == .scanning ? "Scanning Face..." : "Glance to Unlock")
+                                .font(.subheadline.weight(.semibold))
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.white.opacity(0.85))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(16)
+                        .foregroundColor(.white.opacity(0.95))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(
+                            appState.glyphState == .scanning ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.18)
+                        )
+                        .cornerRadius(18)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
@@ -121,26 +144,22 @@ struct FullscreenLockScreenView: View {
         .onReceive(timer) { input in
             currentTime = input
         }
-        .onAppear {
-            onUnlockRequested()
-        }
     }
     
     private var statusMessage: String {
         switch appState.glyphState {
         case .idle:
-            return "Glance at camera to unlock"
+            return "GlanceID Locked • Click to Glance"
         case .scanning:
-            return "Recognizing face..."
+            return "Verifying Face..."
         case .success:
             return "Unlocked"
         case .failure:
-            return "Try Again"
+            return "Face not recognized. Click to retry"
         }
     }
     
     private func handlePasswordSubmit() {
-        // Allow fallback password unlock (or empty press for quick testing)
         if !passwordInput.isEmpty || !appState.isEnrolled {
             onPasswordUnlocked()
         } else {
@@ -155,7 +174,6 @@ struct FullscreenLockScreenView: View {
 struct WallpaperBackgroundView: View {
     var body: some View {
         ZStack {
-            // Elegant macOS Sonoma / Sequoia mesh gradient styling
             LinearGradient(
                 colors: [
                     Color(red: 0.12, green: 0.14, blue: 0.22),
@@ -167,7 +185,6 @@ struct WallpaperBackgroundView: View {
             )
             .ignoresSafeArea()
             
-            // Soft atmospheric lighting orbs
             Circle()
                 .fill(Color.blue.opacity(0.18))
                 .blur(radius: 120)
