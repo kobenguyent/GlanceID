@@ -40,4 +40,12 @@ final class FaceRecognitionEngineTests: XCTestCase {
         XCTAssertNil(engine.landmarkData)
         XCTAssertNil(engine.lastDistance)
     }
+    
+    func testLastDistanceCanBePublishedAndReset() {
+        engine.lastDistance = 0.285
+        XCTAssertEqual(engine.lastDistance, 0.285)
+        
+        engine.reset()
+        XCTAssertNil(engine.lastDistance)
+    }
 }

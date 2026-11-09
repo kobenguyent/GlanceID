@@ -59,6 +59,14 @@ final class AppState: ObservableObject {
         // Connect camera frames to face recognition engine
         cameraManager.frameDelegate = engine
         
+        // Forward camera manager updates so views observing AppState receive camera state changes
+        cameraManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
         loadEnrolledProfile()
         ScreenLockManager.shared.configure(with: self)
         
@@ -85,7 +93,7 @@ final class AppState: ObservableObject {
             
         // Proactively verify camera access permission without turning the camera on
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            NSApp.activate(ignoringOtherApps: true)
+            NSApplication.shared.activate(ignoringOtherApps: true)
             self?.cameraManager.requestAccess()
         }
     }
