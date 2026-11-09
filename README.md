@@ -238,7 +238,7 @@ GlanceID includes a comprehensive unit test suite covering landmark math, EAR bl
 
 ### GitHub Actions Workflow:
 Every push and pull request is automatically verified against macOS runners using [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
-* Matrix testing on Apple Silicon (`macos-14`)
+* Matrix testing on Apple Silicon (`macos-15`)
 * Parallel execution of unit test suites
 * Full release bundle creation & codesign verification
 * PAM module compilation & binary artifact validation

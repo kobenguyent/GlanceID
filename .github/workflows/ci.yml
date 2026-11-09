@@ -14,10 +14,7 @@ concurrency:
 jobs:
   test:
     name: Unit Tests & Build
-    runs-on: macos-14
-    strategy:
-      matrix:
-        xcode: ["latest-stable"]
+    runs-on: macos-15
 
     steps:
       - name: Checkout Repository
