@@ -25,6 +25,8 @@ enum AppTab: String, CaseIterable, Identifiable {
 }
 
 final class AppState: ObservableObject {
+    static let shared = AppState()
+    
     @Published var selectedTab: AppTab = .simulator
     
     // Services

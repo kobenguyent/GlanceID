@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct GlanceIDApp: App {
-    @StateObject private var appState = AppState()
+    @StateObject private var appState = AppState.shared
     
     init() {
         if CommandLine.arguments.contains("--verify") {
