@@ -64,7 +64,20 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
             
-        // Proactively request camera access on launch so system permission dialog appears
+        // Manage camera power lifecycle across tabs: only keep camera active when needed
+        $selectedTab
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newTab in
+                guard let self = self else { return }
+                if newTab != .scanner && newTab != .enrollment && !self.isHUDActive {
+                    self.cameraManager.stop()
+                    self.engine.reset()
+                }
+            }
+            .store(in: &cancellables)
+            
+        // Proactively verify camera access permission without turning the camera on
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             NSApp.activate(ignoringOtherApps: true)
             self?.cameraManager.requestAccess()
@@ -126,6 +139,9 @@ final class AppState: ObservableObject {
         engine.startAuthentication(threshold: threshold) { [weak self] success, distance, userName in
             guard let self = self else { return }
             
+            // Immediately shut off camera as soon as verification completes
+            self.cameraManager.stop()
+            
             if success {
                 self.glyphState = .success
                 self.hudTitle = "Welcome, \(userName ?? "User")"
@@ -149,12 +165,14 @@ final class AppState: ObservableObject {
     }
     
     func cancelAuthentication() {
+        cameraManager.stop()
         isHUDActive = false
         glyphState = .idle
         engine.reset()
     }
     
     private func handleAuthenticationFailure(message: String) {
+        cameraManager.stop()
         self.glyphState = .failure
         self.hudTitle = "Try Again"
         self.hudSubtitle = message
@@ -180,6 +198,7 @@ final class AppState: ObservableObject {
         cameraManager.start()
         engine.startEnrollment { [weak self] result in
             guard let self = self else { return }
+            self.cameraManager.stop()
             switch result {
             case .success(let observation):
                 do {

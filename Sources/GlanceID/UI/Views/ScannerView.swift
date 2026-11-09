@@ -160,6 +160,9 @@ struct ScannerView: View {
         .onAppear {
             appState.cameraManager.start()
         }
+        .onDisappear {
+            appState.cameraManager.stop()
+        }
     }
 }
 

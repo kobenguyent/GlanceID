@@ -116,6 +116,9 @@ struct EnrollmentView: View {
                 inputName = "Mac User"
             }
         }
+        .onDisappear {
+            appState.cameraManager.stop()
+        }
     }
     
     private func startEnrollment() {

@@ -63,7 +63,6 @@ final class CameraManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.authStatus = .authorized
                 self.errorMessage = nil
-                self.start()
                 completion?(true)
             }
             return
@@ -75,7 +74,6 @@ final class CameraManager: NSObject, ObservableObject {
                 self.updateAuthStatus()
                 if granted {
                     self.errorMessage = nil
-                    self.start()
                 } else {
                     self.errorMessage = "Camera access denied. Please allow camera access in System Settings."
                 }
