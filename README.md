@@ -89,7 +89,20 @@ GlanceIDKit.authenticate(reason: "Unlock your sensitive project keys") { success
 
 ## 🚀 Quick Start in 60 Seconds
 
-### Step 1: Clone & Install
+### Option A: Download Pre-built Release (DMG / ZIP)
+
+1. Download **`GlanceID-macOS-Release`** from GitHub Actions Artifacts or Releases.
+2. Unzip the download (double-click the `.zip` to extract).
+3. Inside, open **`GlanceID.dmg`** and drag **`GlanceID.app`** into `/Applications`.
+4. **Gatekeeper Note**: Because GlanceID is ad-hoc signed (no paid Apple Developer Account needed), macOS attaches a quarantine flag to browser downloads. If macOS prompts *"GlanceID is damaged and can't be opened"*, remove the quarantine flag via Terminal:
+   ```bash
+   xattr -cr /Applications/GlanceID.app
+   ```
+   *(Or right-click `GlanceID.app` in Finder $\to$ choose **Open** $\to$ click **Open**)*.
+
+---
+
+### Option B: Build & Install Locally from Source (Recommended)
 
 ```bash
 git clone https://github.com/kobet/GlanceID.git

@@ -33,7 +33,7 @@ jobs:
         run: |
           ./scripts/run_tests.sh
 
-      - name: Build Application Bundle
+      - name: Build Application Bundle & Packages
         run: |
           ./scripts/build_app.sh
 
@@ -47,12 +47,16 @@ jobs:
         run: |
           test -d "build/GlanceID.app"
           codesign -dv --verbose=4 "build/GlanceID.app"
-          echo "✅ Application bundle signature verified!"
+          test -f "build/GlanceID.dmg"
+          test -f "build/GlanceID.zip"
+          echo "✅ Application bundle and packages verified!"
 
-      - name: Upload GlanceID App Artifact
+      - name: Upload GlanceID Release Packages
         uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
         with:
-          name: GlanceID-macOS
-          path: build/GlanceID.app
+          name: GlanceID-macOS-Release
+          path: |
+            build/GlanceID.dmg
+            build/GlanceID.zip
           retention-days: 14

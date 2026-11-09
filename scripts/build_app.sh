@@ -17,7 +17,7 @@ echo " Building ${APP_NAME} for macOS (No Dev Account)"
 echo "================================================="
 
 # 1. Compile release binary using Swift Package Manager
-echo "[1/5] Compiling Swift binary..."
+echo "[1/6] Compiling Swift binary..."
 cd "${PROJECT_DIR}"
 swift build -c release
 
@@ -28,22 +28,22 @@ if [ ! -f "${BIN_PATH}" ]; then
 fi
 
 # 2. Prepare .app bundle directory structure
-echo "[2/5] Creating application bundle structure..."
+echo "[2/6] Creating application bundle structure..."
 rm -rf "${APP_BUNDLE}"
 mkdir -p "${MACOS_DIR}"
 mkdir -p "${RESOURCES_DIR}"
 
 # 3. Copy executable and metadata
-echo "[3/5] Packaging binary and Info.plist..."
+echo "[3/6] Packaging binary and Info.plist..."
 cp "${BIN_PATH}" "${MACOS_DIR}/${APP_NAME}"
-chmod +x "${MACOS_DIR}/${APP_NAME}"
+chmod 755 "${MACOS_DIR}/${APP_NAME}"
 
 cp "${PROJECT_DIR}/Resources/Info.plist" "${CONTENTS_DIR}/Info.plist"
 echo "APPL????" > "${CONTENTS_DIR}/PkgInfo"
 
 # 4. Ad-hoc Code Signing
 # Using '-' as the identity signs the app locally (Ad-Hoc), granting local TCC camera permissions
-echo "[4/5] Ad-hoc code signing bundle with camera entitlements..."
+echo "[4/6] Ad-hoc code signing bundle with camera entitlements..."
 ENTITLEMENTS="${PROJECT_DIR}/Resources/GlanceID.entitlements"
 
 codesign --force --deep --sign - \
@@ -51,13 +51,23 @@ codesign --force --deep --sign - \
     "${APP_BUNDLE}"
 
 # 5. Clear quarantine attributes to prevent Gatekeeper blockage
-echo "[5/5] Removing quarantine flags..."
+echo "[5/6] Removing quarantine flags..."
 xattr -cr "${APP_BUNDLE}"
 
 # Verify code sign
 echo "Verifying code signature:"
 codesign --verify --deep --strict --verbose=1 "${APP_BUNDLE}"
 
+# 6. Create proper macOS distribution packages (.dmg and .zip via ditto)
+echo "[6/6] Packaging distribution artifacts (.dmg and .zip)..."
+# ditto preserves resource forks, execution permissions (+x), and code signatures
+ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${BUILD_DIR}/${APP_NAME}.zip"
+
+# Create Apple Disk Image (.dmg)
+hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${BUILD_DIR}/${APP_NAME}.dmg"
+
 echo ""
-echo "✅ Build Successful!"
-echo "Bundle created at: ${APP_BUNDLE}"
+echo "✅ Build & Packaging Successful!"
+echo "App Bundle: ${APP_BUNDLE}"
+echo "Zip Archive: ${BUILD_DIR}/${APP_NAME}.zip"
+echo "Disk Image: ${BUILD_DIR}/${APP_NAME}.dmg"
