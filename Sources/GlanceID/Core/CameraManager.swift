@@ -19,9 +19,10 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var cameraName: String = "Detecting..."
     @Published var errorMessage: String? = nil
     
-    private let captureSession = AVCaptureSession()
+    let captureSession = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "com.glanceid.sessionqueue", qos: .userInitiated)
     private let videoOutput = AVCaptureVideoDataOutput()
+    private var isConfigured = false
     
     weak var frameDelegate: CameraFrameDelegate?
     
@@ -62,6 +63,7 @@ final class CameraManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.authStatus = .authorized
                 self.errorMessage = nil
+                self.start()
                 completion?(true)
             }
             return
@@ -73,6 +75,7 @@ final class CameraManager: NSObject, ObservableObject {
                 self.updateAuthStatus()
                 if granted {
                     self.errorMessage = nil
+                    self.start()
                 } else {
                     self.errorMessage = "Camera access denied. Please allow camera access in System Settings."
                 }
@@ -81,86 +84,88 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
-    func setupSession() {
-        sessionQueue.async { [weak self] in
-            guard let self = self else { return }
-            
-            if self.captureSession.isRunning {
-                return
-            }
-            
-            self.captureSession.beginConfiguration()
-            self.captureSession.sessionPreset = .high
-            
-            // Remove existing inputs/outputs
-            for input in self.captureSession.inputs {
-                self.captureSession.removeInput(input)
-            }
-            for output in self.captureSession.outputs {
-                self.captureSession.removeOutput(output)
-            }
-            
-            // Discover suitable camera (FaceTime HD camera / built-in / continuity)
-            var deviceTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera]
-            if #available(macOS 14.0, *) {
-                deviceTypes.append(.external)
-            } else {
-                deviceTypes.append(.externalUnknown)
-            }
-            let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: deviceTypes,
-                mediaType: .video,
-                position: .unspecified
-            )
-            
-            guard let device = discovery.devices.first ?? AVCaptureDevice.default(for: .video) else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "No camera found on this Mac."
-                }
-                self.captureSession.commitConfiguration()
-                return
-            }
-            
+    /// Synchronously configures inputs and outputs on the sessionQueue
+    private func configureSession() {
+        guard !isConfigured else { return }
+        
+        captureSession.beginConfiguration()
+        if captureSession.canSetSessionPreset(.high) {
+            captureSession.sessionPreset = .high
+        }
+        
+        // Remove existing inputs/outputs
+        for input in captureSession.inputs {
+            captureSession.removeInput(input)
+        }
+        for output in captureSession.outputs {
+            captureSession.removeOutput(output)
+        }
+        
+        // Search for built-in camera first, then external/continuity
+        var deviceTypes: [AVCaptureDevice.DeviceType] = [.builtInWideAngleCamera]
+        if #available(macOS 14.0, *) {
+            deviceTypes.append(.external)
+        } else {
+            deviceTypes.append(.externalUnknown)
+        }
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: deviceTypes,
+            mediaType: .video,
+            position: .unspecified
+        )
+        
+        let targetDevice = discovery.devices.first(where: { $0.deviceType == .builtInWideAngleCamera })
+            ?? discovery.devices.first
+            ?? AVCaptureDevice.default(for: .video)
+        
+        guard let device = targetDevice else {
             DispatchQueue.main.async {
-                self.cameraName = device.localizedName
+                self.errorMessage = "No camera found on this Mac."
+            }
+            captureSession.commitConfiguration()
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.cameraName = device.localizedName
+        }
+        
+        do {
+            let input = try AVCaptureDeviceInput(device: device)
+            if captureSession.canAddInput(input) {
+                captureSession.addInput(input)
             }
             
-            do {
-                let input = try AVCaptureDeviceInput(device: device)
-                if self.captureSession.canAddInput(input) {
-                    self.captureSession.addInput(input)
-                }
-                
-                self.videoOutput.alwaysDiscardsLateVideoFrames = true
-                self.videoOutput.videoSettings = [
-                    kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
-                ]
-                self.videoOutput.setSampleBufferDelegate(self, queue: self.sessionQueue)
-                
-                if self.captureSession.canAddOutput(self.videoOutput) {
-                    self.captureSession.addOutput(self.videoOutput)
-                }
-                
-                self.captureSession.commitConfiguration()
-            } catch {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Camera input error: \(error.localizedDescription)"
-                }
-                self.captureSession.commitConfiguration()
+            videoOutput.alwaysDiscardsLateVideoFrames = true
+            videoOutput.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+            ]
+            videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
+            
+            if captureSession.canAddOutput(videoOutput) {
+                captureSession.addOutput(videoOutput)
             }
+            
+            captureSession.commitConfiguration()
+            isConfigured = true
+        } catch {
+            DispatchQueue.main.async {
+                self.errorMessage = "Camera input error: \(error.localizedDescription)"
+            }
+            captureSession.commitConfiguration()
         }
     }
     
     func start() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        if status == .notDetermined {
+        if status == .authorized {
+            startSessionRunning()
+        } else if status == .notDetermined {
             requestAccess { [weak self] granted in
                 if granted {
                     self?.startSessionRunning()
                 }
             }
-        } else if status == .authorized {
-            startSessionRunning()
         } else {
             updateAuthStatus()
         }
@@ -169,8 +174,10 @@ final class CameraManager: NSObject, ObservableObject {
     private func startSessionRunning() {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
+            if !self.isConfigured {
+                self.configureSession()
+            }
             if !self.captureSession.isRunning {
-                self.setupSession()
                 self.captureSession.startRunning()
                 DispatchQueue.main.async {
                     self.isRunning = self.captureSession.isRunning

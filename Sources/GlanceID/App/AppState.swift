@@ -94,6 +94,22 @@ final class AppState: ObservableObject {
     func triggerAuthentication(onSuccess: (() -> Void)? = nil) {
         guard !isHUDActive else { return }
         
+        guard isEnrolled else {
+            isHUDActive = true
+            glyphState = .failure
+            hudTitle = "No Face Enrolled"
+            hudSubtitle = "Please enroll your face first."
+            soundManager.playFaceIDFailure()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+                withAnimation {
+                    self?.isHUDActive = false
+                    self?.glyphState = .idle
+                    self?.selectedTab = .enrollment
+                }
+            }
+            return
+        }
+        
         isHUDActive = true
         glyphState = .scanning
         hudTitle = "GlanceID"

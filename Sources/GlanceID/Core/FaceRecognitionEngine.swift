@@ -32,13 +32,11 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     @Published var isAuthenticating: Bool = false
     @Published var isEnrolling: Bool = false
     
-    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     private var isProcessingFrame = false
     private let processingQueue = DispatchQueue(label: "com.glanceid.visionqueue", qos: .userInitiated)
     
-    // Last extracted feature print and current cropped face image
+    // Last extracted feature print
     private var currentFeaturePrint: VNFeaturePrintObservation?
-    private var currentFaceCrop: CGImage?
     
     // Enrollment state
     private var enrollmentCompletion: ((Result<VNFeaturePrintObservation, Error>) -> Void)?
@@ -158,39 +156,13 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     }
     
     private func extractFeaturePrint(from pixelBuffer: CVPixelBuffer, faceBounds: CGRect) -> VNFeaturePrintObservation? {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let width = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
-        let height = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
-        
-        // Vision bounding box is normalized with (0,0) at bottom-left
-        let x = faceBounds.origin.x * width
-        let y = faceBounds.origin.y * height
-        let w = faceBounds.size.width * width
-        let h = faceBounds.size.height * height
-        
-        // Add 15% margin around face
-        let marginX = w * 0.15
-        let marginY = h * 0.15
-        let cropRect = CGRect(
-            x: max(0, x - marginX),
-            y: max(0, y - marginY),
-            width: min(width, w + (marginX * 2)),
-            height: min(height, h + (marginY * 2))
-        )
-        
-        let croppedCI = ciImage.cropped(to: cropRect)
-        guard let cgImage = ciContext.createCGImage(croppedCI, from: cropRect) else {
-            return nil
-        }
-        
-        self.currentFaceCrop = cgImage
-        
         let featurePrintRequest = VNGenerateImageFeaturePrintRequest()
+        featurePrintRequest.regionOfInterest = faceBounds
         featurePrintRequest.imageCropAndScaleOption = .scaleFill
         
-        let cropHandler = VNImageRequestHandler(cgImage: cgImage, orientation: .up, options: [:])
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
         do {
-            try cropHandler.perform([featurePrintRequest])
+            try handler.perform([featurePrintRequest])
             return featurePrintRequest.results?.first as? VNFeaturePrintObservation
         } catch {
             return nil
@@ -200,15 +172,11 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     private func handleEnrollmentStep(featurePrint: VNFeaturePrintObservation?, quality: Float) {
         guard let featurePrint = featurePrint else { return }
         
-        // Ensure user is centered with good quality (quality > 0.40)
-        if quality >= 0.40 {
-            self.isEnrolling = false
-            self.state = .authenticated(userName: "Enrolled", distance: 0.0)
-            self.enrollmentCompletion?(.success(featurePrint))
-            self.enrollmentCompletion = nil
-        } else {
-            self.state = .tracking(quality: quality)
-        }
+        // Complete enrollment immediately once face feature vector is extracted
+        self.isEnrolling = false
+        self.state = .authenticated(userName: "Enrolled", distance: 0.0)
+        self.enrollmentCompletion?(.success(featurePrint))
+        self.enrollmentCompletion = nil
     }
     
     private func handleAuthenticationStep(featurePrint: VNFeaturePrintObservation?, quality: Float) {
@@ -237,12 +205,7 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
                 self.authCompletion?(true, distance, stored.profile.userName)
                 self.authCompletion = nil
             } else {
-                // If quality is high and face is close, but distance exceeds threshold: unrecognized
-                if quality > 0.45 {
-                    self.state = .unrecognized(distance: distance)
-                } else {
-                    self.state = .tracking(quality: quality)
-                }
+                self.state = .tracking(quality: quality)
             }
         } catch {
             self.isAuthenticating = false
