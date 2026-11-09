@@ -106,6 +106,7 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
               let primaryFace = faceObservations.first else {
             DispatchQueue.main.async {
                 self.landmarkData = nil
+                self.lastDistance = nil
                 if self.isAuthenticating || self.isEnrolling {
                     self.state = .searching
                 }
@@ -144,6 +145,15 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
             } else if self.isAuthenticating {
                 self.handleAuthenticationStep(featurePrint: featurePrint, quality: captureQuality)
             } else {
+                if let currentPrint = featurePrint,
+                   let stored = BiometricStorage.shared.loadProfile() {
+                    var dist: Float = 1.0
+                    if (try? stored.observation.computeDistance(&dist, to: currentPrint)) != nil {
+                        self.lastDistance = dist
+                    }
+                } else {
+                    self.lastDistance = nil
+                }
                 self.state = .tracking(quality: captureQuality)
             }
         }

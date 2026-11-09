@@ -2,10 +2,16 @@ import SwiftUI
 
 struct EnrollmentView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var cameraManager: CameraManager
     @State private var inputName: String = NSFullUserName()
     @State private var isEnrolling: Bool = false
     @State private var statusMessage: String = ""
     @State private var isSuccess: Bool = false
+    
+    init(appState: AppState) {
+        self.appState = appState
+        self._cameraManager = ObservedObject(wrappedValue: appState.cameraManager)
+    }
     
     var body: some View {
         VStack(spacing: 24) {
@@ -29,10 +35,13 @@ struct EnrollmentView: View {
                     )
                     .frame(width: 220, height: 220)
                 
-                if appState.cameraManager.isRunning {
-                    CameraPreviewView(session: appState.cameraManager.previewSession)
-                        .clipShape(Circle())
-                        .frame(width: 212, height: 212)
+                if cameraManager.isRunning {
+                    CameraPreviewView(
+                        session: cameraManager.previewSession,
+                        mirrored: appState.isCameraMirrored
+                    )
+                    .clipShape(Circle())
+                    .frame(width: 212, height: 212)
                 } else {
                     Circle()
                         .fill(Color.black.opacity(0.75))
@@ -111,13 +120,13 @@ struct EnrollmentView: View {
         }
         .padding()
         .onAppear {
-            appState.cameraManager.start()
+            cameraManager.start()
             if inputName.isEmpty {
                 inputName = "Mac User"
             }
         }
         .onDisappear {
-            appState.cameraManager.stop()
+            cameraManager.stop()
         }
     }
     
