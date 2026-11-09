@@ -20,10 +20,32 @@ struct GlanceIDApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandMenu("GlanceID") {
-                Button("Lock MacBook Screen") {
+                Button("Lock MacBook Screen (⌥⌘L)") {
                     ScreenLockManager.shared.lockMacBook()
                 }
-                .keyboardShortcut("l", modifiers: [.command])
+                .keyboardShortcut("l", modifiers: [.option, .command])
+            }
+        }
+        
+        MenuBarExtra("GlanceID", systemImage: "faceid") {
+            Button("Lock MacBook Screen (⌥⌘L)") {
+                ScreenLockManager.shared.lockMacBook()
+            }
+            .keyboardShortcut("l", modifiers: [.option, .command])
+            
+            Divider()
+            
+            Button("Open Dashboard") {
+                NSApp.activate(ignoringOtherApps: true)
+                for window in NSApp.windows where !(window is NSPanel) {
+                    window.makeKeyAndOrderFront(nil)
+                }
+            }
+            
+            Divider()
+            
+            Button("Quit GlanceID") {
+                NSApplication.shared.terminate(nil)
             }
         }
     }

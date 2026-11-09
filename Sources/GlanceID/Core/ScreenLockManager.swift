@@ -12,6 +12,18 @@ final class ScreenLockManager: ObservableObject {
     
     private init() {
         setupSystemNotifications()
+        setupGlobalHotkey()
+    }
+    
+    private func setupGlobalHotkey() {
+        // Global hotkey: Option + Command + L (⌥⌘L) locks screen from any application
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.modifierFlags.contains([.option, .command]) && event.charactersIgnoringModifiers?.lowercased() == "l" {
+                DispatchQueue.main.async {
+                    self?.lockMacBook()
+                }
+            }
+        }
     }
     
     func configure(with appState: AppState) {
