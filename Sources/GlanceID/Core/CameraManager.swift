@@ -1,6 +1,6 @@
 import Foundation
 import AVFoundation
-import CoreImage
+import AppKit
 
 enum CameraAuthorizationStatus {
     case authorized
@@ -40,23 +40,43 @@ final class CameraManager: NSObject, ObservableObject {
             switch status {
             case .authorized:
                 self.authStatus = .authorized
+                self.errorMessage = nil
             case .notDetermined:
                 self.authStatus = .notDetermined
             case .denied:
                 self.authStatus = .denied
+                self.errorMessage = "Camera permission denied. Enable GlanceID in System Settings > Privacy & Security > Camera."
             case .restricted:
                 self.authStatus = .restricted
+                self.errorMessage = "Camera access restricted by system policy."
             @unknown default:
                 self.authStatus = .denied
             }
         }
     }
     
-    func requestAccess(completion: @escaping (Bool) -> Void) {
+    /// Explicitly requests camera access from macOS TCC, triggering the system dialog
+    func requestAccess(completion: ((Bool) -> Void)? = nil) {
+        let currentStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if currentStatus == .authorized {
+            DispatchQueue.main.async {
+                self.authStatus = .authorized
+                self.errorMessage = nil
+                completion?(true)
+            }
+            return
+        }
+        
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             DispatchQueue.main.async {
-                self?.updateAuthStatus()
-                completion(granted)
+                guard let self = self else { return }
+                self.updateAuthStatus()
+                if granted {
+                    self.errorMessage = nil
+                } else {
+                    self.errorMessage = "Camera access denied. Please allow camera access in System Settings."
+                }
+                completion?(granted)
             }
         }
     }
@@ -132,6 +152,21 @@ final class CameraManager: NSObject, ObservableObject {
     }
     
     func start() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        if status == .notDetermined {
+            requestAccess { [weak self] granted in
+                if granted {
+                    self?.startSessionRunning()
+                }
+            }
+        } else if status == .authorized {
+            startSessionRunning()
+        } else {
+            updateAuthStatus()
+        }
+    }
+    
+    private func startSessionRunning() {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             if !self.captureSession.isRunning {

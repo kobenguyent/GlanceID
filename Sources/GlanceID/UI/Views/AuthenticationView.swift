@@ -55,6 +55,69 @@ struct AuthenticationView: View {
                 )
                 .padding(.horizontal, 32)
                 
+                // Camera Permission Warning / Action if needed
+                if appState.cameraManager.authStatus == .denied {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.title2)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Camera Permission Required")
+                                .font(.headline)
+                            Text("GlanceID needs camera access. Please enable it in macOS System Settings.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Open Settings") {
+                            appState.openCameraPrivacySettings()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    .padding()
+                    .background(Color.orange.opacity(0.12))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 32)
+                } else if appState.cameraManager.authStatus == .notDetermined {
+                    HStack(spacing: 12) {
+                        Image(systemName: "camera.badge.ellipsis")
+                            .foregroundColor(.accentColor)
+                            .font(.title2)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Camera Access Not Yet Granted")
+                                .font(.headline)
+                            Text("Click below to trigger the macOS camera permission prompt.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Button("Allow Camera") {
+                            appState.cameraManager.requestAccess()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    .padding()
+                    .background(Color.accentColor.opacity(0.12))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 32)
+                }
+                
                 // Big Face ID Trigger Button
                 VStack(spacing: 16) {
                     Button(action: {

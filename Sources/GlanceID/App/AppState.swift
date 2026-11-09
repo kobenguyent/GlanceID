@@ -63,6 +63,18 @@ final class AppState: ObservableObject {
                 self?.handleEngineState(state)
             }
             .store(in: &cancellables)
+            
+        // Proactively request camera access on launch so system permission dialog appears
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.cameraManager.requestAccess()
+        }
+    }
+    
+    func openCameraPrivacySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+            NSWorkspace.shared.open(url)
+        }
     }
     
     func loadEnrolledProfile() {
