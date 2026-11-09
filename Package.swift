@@ -16,6 +16,11 @@ let package = Package(
         .executableTarget(
             name: "GlanceID",
             path: "Sources/GlanceID"
+        ),
+        .testTarget(
+            name: "GlanceIDTests",
+            dependencies: ["GlanceID"],
+            path: "Tests/GlanceIDTests"
         )
     ]
 )

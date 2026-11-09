@@ -79,6 +79,9 @@ final class LivenessDetector: ObservableObject {
         if isLivenessConfirmed {
             state = .passed
             return true
+        } else if avgRatio < eyeClosedThreshold {
+            state = .blinkDetected
+            return false
         } else {
             state = .eyesOpen(ear: avgRatio)
             return false

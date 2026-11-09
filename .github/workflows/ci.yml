@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit Tests & Build
+    runs-on: macos-14
+    strategy:
+      matrix:
+        xcode: ["latest-stable"]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Environment Diagnostics
+        run: |
+          echo "=== System Info ==="
+          sw_vers
+          uname -m
+          echo "=== Developer Tools ==="
+          xcode-select -p
+          swift --version
+
+      - name: Run Test Suite
+        run: |
+          ./scripts/run_tests.sh
+
+      - name: Build Application Bundle
+        run: |
+          ./scripts/build_app.sh
+
+      - name: Build PAM Module
+        run: |
+          clang -shared -fPIC -lpam pam/pam_glanceid.c -o pam/pam_glanceid.so
+          test -f pam/pam_glanceid.so
+          echo "✅ PAM module compiled successfully!"
+
+      - name: Verify Bundle Integrity
+        run: |
+          test -d "build/GlanceID.app"
+          codesign -dv --verbose=4 "build/GlanceID.app"
+          echo "✅ Application bundle signature verified!"
+
+      - name: Upload GlanceID App Artifact
+        uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        with:
+          name: GlanceID-macOS
+          path: build/GlanceID.app
+          retention-days: 14

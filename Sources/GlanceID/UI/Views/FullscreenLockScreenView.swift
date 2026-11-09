@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 struct FullscreenLockScreenView: View {
     @ObservedObject var appState: AppState
