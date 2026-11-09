@@ -4,6 +4,13 @@ import SwiftUI
 struct GlanceIDApp: App {
     @StateObject private var appState = AppState()
     
+    init() {
+        if CommandLine.arguments.contains("--verify") {
+            let exitCode = CLIAuthRunner.run()
+            exit(exitCode)
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView(appState: appState)
@@ -11,6 +18,14 @@ struct GlanceIDApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
+        .commands {
+            CommandMenu("GlanceID") {
+                Button("Lock MacBook Screen") {
+                    ScreenLockManager.shared.lockMacBook()
+                }
+                .keyboardShortcut("l", modifiers: [.command])
+            }
+        }
     }
 }
 
@@ -29,6 +44,8 @@ struct ContentView: View {
             switch appState.selectedTab {
             case .simulator:
                 AuthenticationView(appState: appState)
+            case .lockScreen:
+                LockScreenHubView(appState: appState)
             case .scanner:
                 ScannerView(appState: appState)
             case .enrollment:

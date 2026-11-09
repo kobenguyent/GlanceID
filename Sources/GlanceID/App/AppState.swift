@@ -4,6 +4,7 @@ import Combine
 
 enum AppTab: String, CaseIterable, Identifiable {
     case simulator = "Face ID HUD"
+    case lockScreen = "Lock MacBook"
     case scanner = "Neural Scanner"
     case enrollment = "Enroll Face"
     case vault = "Protected Vault"
@@ -14,6 +15,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .simulator: return "faceid"
+        case .lockScreen: return "laptopcomputer.and.arrow.down"
         case .scanner: return "viewfinder"
         case .enrollment: return "person.badge.plus"
         case .vault: return "lock.shield"
@@ -55,6 +57,7 @@ final class AppState: ObservableObject {
         cameraManager.frameDelegate = engine
         
         loadEnrolledProfile()
+        ScreenLockManager.shared.configure(with: self)
         
         // Listen to engine state updates
         engine.$state
