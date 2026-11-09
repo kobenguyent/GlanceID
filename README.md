@@ -17,23 +17,32 @@
 
 ## ⚡ Key Features
 
-1. **Authentic iOS Face ID Experience**:
+1. **MacBook Full-Screen Face ID Lock & Unlock**:
+   * Lock your entire MacBook screen with `⌘L` or via the **Lock MacBook** tab.
+   * Renders an authentic macOS Sonoma/Sequoia style lock screen (clock, date, frosted wallpaper, user profile).
+   * Glancing at the camera verifies your facial biometrics, morphs the top pill into a checkmark, plays the chime, and unlocks the screen with a smooth upward slide.
+   * Includes password fallback field.
+
+2. **Terminal `sudo` Face ID (PAM Integration)**:
+   * Like Touch ID (`pam_tid.so`), GlanceID includes a native PAM module (`pam_glanceid.so`).
+   * When you run `sudo` in Terminal, GlanceID glances at your camera and authenticates root privileges with Face ID!
+
+3. **Authentic iOS Face ID Experience**:
    * Iconic 4-bracket corner scanning HUD with expanding/contracting radar animations.
    * Smooth vector morphing into the green checkmark upon match.
    * Dual-tone synthesized chime matching the iOS Face ID feedback tone.
    * Spring-animated failure shake on mismatch.
 
-2. **Native Vision Biometrics Pipeline**:
+4. **Strict On-Demand Camera Power Management**:
+   * Camera hardware remains completely off (⚪ green LED off) until actively needed.
+   * Powers on for ~0.4s during a glance and immediately cuts power the millisecond a match occurs.
+
+5. **Native Vision Biometrics Pipeline**:
    * `VNDetectFaceLandmarksRequest`: Real-time tracking of eyes, nose, lips, and facial contour geometry.
-   * `VNDetectFaceCaptureQualityRequest`: Ensures user attention and optimal lighting before matching.
-   * `VNGenerateImageFeaturePrintRequest`: Generates 512-dimension mathematical feature prints (`VNFeaturePrintObservation`).
+   * `VNGenerateImageFeaturePrintRequest`: Extracts 512-dimension mathematical feature prints (`VNFeaturePrintObservation`).
    * `computeDistance(_:to:)`: Euclidean/Cosine distance comparison (Threshold ~0.42) for biometric verification.
 
-3. **Neural Telemetry Scanner**:
-   * Live camera preview showing the real-time facial wireframe mesh and pupil tracking dots.
-   * Live readout of head roll, yaw, attention quality, and biometric distance vectors.
-
-4. **Biometric Vault Demo**:
+6. **Biometric Vault Demo**:
    * A mock protected vault (API keys, SSH credentials, private notes) that locks and unlocks via GlanceID.
 
 ---
