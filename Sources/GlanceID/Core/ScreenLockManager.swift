@@ -6,7 +6,7 @@ final class ScreenLockManager: ObservableObject {
     static let shared = ScreenLockManager()
     
     @Published var isMacBookLocked: Bool = false
-    private var lockWindow: NSWindow?
+    private var lockWindows: [NSWindow] = []
     private var appState: AppState?
     private var glanceTimeoutItem: DispatchWorkItem?
     
@@ -51,6 +51,14 @@ final class ScreenLockManager: ObservableObject {
             name: NSWorkspace.screensDidWakeNotification,
             object: nil
         )
+        
+        // Listen to display connect/disconnect or arrangement changes to adapt multi-screen coverage
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScreenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
     }
     
     @objc private func handleScreenLocked() {
@@ -71,12 +79,20 @@ final class ScreenLockManager: ObservableObject {
     @objc private func handleDisplayWake() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, self.isMacBookLocked else { return }
-            // On display wake, run a quick 2-second glance scan
+            // On display wake, run a quick glance scan
             self.triggerFaceIDUnlock()
         }
     }
     
-    // MARK: - Lock Screen Presentation
+    @objc private func handleScreenParametersChanged() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isMacBookLocked else { return }
+            // Displays plugged/unplugged or resolutions changed while locked: re-cover all screens
+            self.recreateLockWindows()
+        }
+    }
+    
+    // MARK: - Multi-Screen Lock Presentation
     func lockMacBook() {
         guard !isMacBookLocked else { return }
         guard let appState = self.appState else { return }
@@ -87,21 +103,64 @@ final class ScreenLockManager: ObservableObject {
         appState.cameraManager.stop()
         appState.glyphState = .idle
         
-        let screenRect = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        // Reload wallpapers for all attached displays
+        WallpaperProvider.shared.reloadWallpaper()
+        
+        recreateLockWindows()
+    }
+    
+    private func recreateLockWindows() {
+        guard let appState = self.appState else { return }
+        
+        // Order out and clean any previous windows
+        for window in lockWindows {
+            window.orderOut(nil)
+        }
+        lockWindows.removeAll()
+        
+        // Query all attached monitors
+        let screens = NSScreen.screens.isEmpty ? [NSScreen.main].compactMap { $0 } : NSScreen.screens
+        let primaryScreen = NSScreen.main ?? screens.first
+        
+        for screen in screens {
+            let isPrimary = (screen == primaryScreen)
+            let window = createLockWindow(for: screen, isPrimary: isPrimary, appState: appState)
+            lockWindows.append(window)
+        }
+        
+        // Display all lock windows across every connected monitor at screensaver level
+        for window in lockWindows {
+            window.orderFrontRegardless()
+        }
+        
+        // Focus the primary screen window for keyboard and password input
+        if let primaryWindow = lockWindows.first(where: { ($0.screen ?? NSScreen.main) == primaryScreen }) {
+            primaryWindow.makeKeyAndOrderFront(nil)
+        }
+        
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    private func createLockWindow(for screen: NSScreen, isPrimary: Bool, appState: AppState) -> NSWindow {
         let window = NSWindow(
-            contentRect: screenRect,
+            contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: screen
         )
+        window.setFrame(screen.frame, display: true)
         window.level = .screenSaver
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.isOpaque = true
         window.hasShadow = false
         window.ignoresMouseEvents = false
+        window.backgroundColor = .black
         
         let lockView = FullscreenLockScreenView(
             appState: appState,
+            screen: screen,
+            isPrimary: isPrimary,
             onUnlockRequested: { [weak self] in
                 self?.triggerFaceIDUnlock()
             },
@@ -111,10 +170,7 @@ final class ScreenLockManager: ObservableObject {
         )
         
         window.contentView = NSHostingView(rootView: lockView)
-        window.makeKeyAndOrderFront(nil)
-        self.lockWindow = window
-        
-        NSApp.activate(ignoringOtherApps: true)
+        return window
     }
     
     func unlockMacBook() {
@@ -125,14 +181,13 @@ final class ScreenLockManager: ObservableObject {
         appState?.cameraManager.stop()
         appState?.engine.reset()
         
-        if let window = lockWindow {
+        for window in lockWindows {
             window.orderOut(nil)
-            self.lockWindow = nil
-            self.isMacBookLocked = false
-            self.appState?.glyphState = .idle
-        } else {
-            isMacBookLocked = false
         }
+        lockWindows.removeAll()
+        
+        isMacBookLocked = false
+        appState?.glyphState = .idle
     }
     
     /// Bounded Face ID glance: runs camera for max 2.5 seconds, then immediately cuts camera power
@@ -162,7 +217,7 @@ final class ScreenLockManager: ObservableObject {
         self.glanceTimeoutItem = timeoutItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: timeoutItem)
         
-        appState.engine.startAuthentication(threshold: appState.threshold) { [weak self, weak appState] matched, dist, name in
+        appState.engine.startAuthentication(threshold: appState.threshold, requireLiveness: appState.requireLiveness) { [weak self, weak appState] matched, dist, name in
             guard let self = self, let appState = appState, self.isMacBookLocked else { return }
             
             self.glanceTimeoutItem?.cancel()
@@ -174,7 +229,7 @@ final class ScreenLockManager: ObservableObject {
             if matched {
                 appState.glyphState = .success
                 appState.soundManager.playFaceIDSuccess()
-                // FullscreenLockScreenView.onChange triggers the slide-up animation and calls unlockMacBook
+                // FullscreenLockScreenView.onChange triggers the synchronized slide-up animation across all screens
             } else {
                 appState.glyphState = .failure
                 appState.soundManager.playFaceIDFailure()

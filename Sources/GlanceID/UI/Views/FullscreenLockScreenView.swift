@@ -4,6 +4,8 @@ import Combine
 
 struct FullscreenLockScreenView: View {
     @ObservedObject var appState: AppState
+    var screen: NSScreen? = nil
+    var isPrimary: Bool = true
     var onUnlockRequested: () -> Void
     var onPasswordUnlocked: () -> Void
     
@@ -20,10 +22,10 @@ struct FullscreenLockScreenView: View {
         GeometryReader { geo in
             ZStack {
                 // Authentic macOS Desktop Wallpaper Background with dynamic unblur
-                WallpaperBackgroundView(blurRadius: wallpaperBlur)
+                WallpaperBackgroundView(screen: screen, blurRadius: wallpaperBlur)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if appState.glyphState == .idle && !isSlidingUp {
+                        if !isSlidingUp {
                             onUnlockRequested()
                         }
                     }
@@ -37,33 +39,48 @@ struct FullscreenLockScreenView: View {
                         
                         Spacer()
                         
-                        // Center: Interactive Apple Face ID Morph Pill
-                        Button(action: {
-                            if !isSlidingUp {
-                                onUnlockRequested()
+                        // Center: Interactive Apple Face ID Morph Pill on primary; subtle status on secondary
+                        if isPrimary {
+                            Button(action: {
+                                if !isSlidingUp {
+                                    onUnlockRequested()
+                                }
+                            }) {
+                                HStack(spacing: 9) {
+                                    AppleLockGlyphView(state: appState.glyphState, size: 22)
+                                    
+                                    Text(statusMessage)
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                        .foregroundColor(.white.opacity(0.95))
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(20)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(
+                                            appState.glyphState == .scanning ? Color.accentColor.opacity(0.85) : (appState.glyphState == .success ? Color.green.opacity(0.8) : Color.white.opacity(0.25)),
+                                            lineWidth: 1.5
+                                        )
+                                )
+                                .shadow(color: appState.glyphState == .success ? Color.green.opacity(0.4) : Color.black.opacity(0.2), radius: 10)
                             }
-                        }) {
-                            HStack(spacing: 9) {
-                                AppleLockGlyphView(state: appState.glyphState, size: 22)
-                                
-                                Text(statusMessage)
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.white.opacity(0.95))
+                            .buttonStyle(.plain)
+                        } else {
+                            HStack(spacing: 8) {
+                                Image(systemName: appState.glyphState == .success ? "lock.open.fill" : "lock.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(appState.glyphState == .success ? .green : .white.opacity(0.7))
+                                Text(appState.glyphState == .success ? "Unlocked" : "GlanceID Locked")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.7))
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
                             .background(.ultraThinMaterial)
-                            .cornerRadius(20)
-                            .overlay(
-                                Capsule()
-                                    .stroke(
-                                        appState.glyphState == .scanning ? Color.accentColor.opacity(0.85) : (appState.glyphState == .success ? Color.green.opacity(0.8) : Color.white.opacity(0.25)),
-                                        lineWidth: 1.5
-                                    )
-                            )
-                            .shadow(color: appState.glyphState == .success ? Color.green.opacity(0.4) : Color.black.opacity(0.2), radius: 10)
+                            .cornerRadius(16)
                         }
-                        .buttonStyle(.plain)
                         
                         Spacer()
                         
@@ -106,94 +123,126 @@ struct FullscreenLockScreenView: View {
                     
                     Spacer()
                     
-                    // User Profile & Face ID Trigger
-                    VStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 84, height: 84)
-                                .overlay(
-                                    Circle()
-                                        .stroke(appState.glyphState == .success ? Color.green : Color.white.opacity(0.35), lineWidth: 3)
-                                )
-                            
-                            Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(.white.opacity(0.85))
-                        }
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        
-                        Text(appState.isEnrolled ? appState.enrolledName : NSFullUserName())
-                            .font(.title3.bold())
-                            .foregroundColor(.white)
-                            .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 2)
-                        
-                        // Fallback Password input
-                        HStack(spacing: 8) {
-                            SecureField("Enter Password", text: $passwordInput)
-                                .textFieldStyle(.plain)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(Color.black.opacity(0.35))
-                                .cornerRadius(18)
-                                .foregroundColor(.white)
-                                .frame(width: 175)
-                                .onSubmit {
-                                    handlePasswordSubmit()
-                                }
-                            
-                            Button(action: {
-                                handlePasswordSubmit()
-                            }) {
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .font(.system(size: 22))
+                    if isPrimary {
+                        // User Profile & Face ID Trigger
+                        VStack(spacing: 14) {
+                            ZStack {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 84, height: 84)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(appState.glyphState == .success ? Color.green : Color.white.opacity(0.35), lineWidth: 3)
+                                    )
+                                
+                                Image(systemName: "person.crop.circle.fill")
+                                    .font(.system(size: 80))
                                     .foregroundColor(.white.opacity(0.85))
+                            }
+                            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                            
+                            Text(appState.isEnrolled ? appState.enrolledName : NSFullUserName())
+                                .font(.title3.bold())
+                                .foregroundColor(.white)
+                                .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 2)
+                            
+                            // Fallback Password input
+                            HStack(spacing: 8) {
+                                SecureField("Enter Password", text: $passwordInput)
+                                    .textFieldStyle(.plain)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .background(Color.black.opacity(0.35))
+                                    .cornerRadius(18)
+                                    .foregroundColor(.white)
+                                    .frame(width: 175)
+                                    .onSubmit {
+                                        handlePasswordSubmit()
+                                    }
+                                
+                                Button(action: {
+                                    handlePasswordSubmit()
+                                }) {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .stroke(showPasswordError ? Color.red : Color.white.opacity(0.25), lineWidth: 1)
+                            )
+                            
+                            // Face ID Trigger Button
+                            Button(action: {
+                                if !isSlidingUp {
+                                    onUnlockRequested()
+                                }
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "faceid")
+                                        .font(.system(size: 15, weight: .semibold))
+                                    Text(appState.glyphState == .scanning ? "Scanning Face..." : "Glance to Unlock")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                                .foregroundColor(.white.opacity(0.95))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                                .background(
+                                    appState.glyphState == .scanning ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.18)
+                                )
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 2)
+                        }
+                        .padding(.bottom, 50)
+                    } else {
+                        // Secondary screen subtle click-to-unlock hint
+                        VStack(spacing: 8) {
+                            Button(action: {
+                                if !isSlidingUp {
+                                    onUnlockRequested()
+                                }
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "faceid")
+                                        .font(.system(size: 14))
+                                    Text("Click to Glance & Unlock")
+                                        .font(.subheadline.weight(.medium))
+                                }
+                                .foregroundColor(.white.opacity(0.85))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(16)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
                             }
                             .buttonStyle(.plain)
                         }
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18)
-                                .stroke(showPasswordError ? Color.red : Color.white.opacity(0.25), lineWidth: 1)
-                        )
-                        
-                        // Face ID Trigger Button
-                        Button(action: {
-                            if !isSlidingUp {
-                                onUnlockRequested()
-                            }
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "faceid")
-                                    .font(.system(size: 15, weight: .semibold))
-                                Text(appState.glyphState == .scanning ? "Scanning Face..." : "Glance to Unlock")
-                                    .font(.subheadline.weight(.semibold))
-                            }
-                            .foregroundColor(.white.opacity(0.95))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 8)
-                            .background(
-                                appState.glyphState == .scanning ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.18)
-                            )
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 2)
+                        .padding(.bottom, 60)
                     }
-                    .padding(.bottom, 50)
                 }
                 .offset(y: slideOffset)
                 .opacity(contentOpacity)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
             .onChange(of: appState.glyphState) { newState in
                 if newState == .success && !isSlidingUp {
                     performSlideUpUnlock(screenHeight: geo.size.height)
                 }
             }
         }
+        .edgesIgnoringSafeArea(.all)
         .onReceive(timer) { input in
             currentTime = input
         }
@@ -236,17 +285,13 @@ struct FullscreenLockScreenView: View {
     
     private func handlePasswordSubmit() {
         if !passwordInput.isEmpty || !appState.isEnrolled {
-            withAnimation(.spring(response: 0.52, dampingFraction: 0.85)) {
-                isSlidingUp = true
-                slideOffset = -1200
-                wallpaperBlur = 0.0
-                contentOpacity = 0.0
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                onPasswordUnlocked()
+            appState.soundManager.playFaceIDSuccess()
+            withAnimation {
+                appState.glyphState = .success
             }
         } else {
             showPasswordError = true
+            appState.soundManager.playFaceIDFailure()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 showPasswordError = false
             }
@@ -257,12 +302,14 @@ struct FullscreenLockScreenView: View {
 /// Renders the real macOS desktop wallpaper dynamically with Apple's lock screen depth blur
 struct WallpaperBackgroundView: View {
     @ObservedObject var wallpaperProvider = WallpaperProvider.shared
+    var screen: NSScreen? = nil
     var blurRadius: CGFloat = 8.0
     
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if let wallpaper = wallpaperProvider.wallpaperImage {
+                let wallpaper = wallpaperProvider.wallpaper(for: screen)
+                if let wallpaper = wallpaper {
                     Image(nsImage: wallpaper)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
@@ -282,22 +329,7 @@ struct WallpaperBackgroundView: View {
                         endPoint: .bottomTrailing
                     )
                 }
-                
-                // Authentic Apple lock screen darkening vignette gradient
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.35),
-                        Color.black.opacity(0.08),
-                        Color.black.opacity(0.45)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
             }
-            .ignoresSafeArea()
-        }
-        .onAppear {
-            wallpaperProvider.reloadWallpaper()
         }
     }
 }
