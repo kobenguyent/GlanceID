@@ -1,11 +1,23 @@
 ### Summary
-<!-- High-level and clean summary of what this PR does and why -->
+<!-- 
+Rule: 1-3 plain-English sentences.
+State what was broken/missing and what this PR changes at a high level.
+Keep it simple — avoid symbol dumps and deep jargon.
+-->
 
 ### Root Cause
-<!-- What caused the issue or why this change is necessary (if applicable) -->
+<!-- 
+Rule: 2-4 concise bullets explaining WHY the bug occurred or why the change is needed.
+Explain the breakdown simply so anyone understands in 10 seconds.
+-->
 
 ### Solution
-<!-- Clear and effective description of how this PR solves the problem -->
+<!-- 
+Rule: 2-4 outcome-focused bullets explaining HOW it was fixed.
+Focus on behavior and results rather than repeating code lines.
+-->
 
 ### Note (if have)
-<!-- Testing evidence, verification details, or operational notes -->
+<!-- 
+Rule: Keep brief (1-2 bullets). Test status, verification evidence, or follow-ups.
+-->
