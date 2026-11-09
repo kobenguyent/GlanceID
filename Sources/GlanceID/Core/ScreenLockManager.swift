@@ -114,16 +114,10 @@ final class ScreenLockManager: ObservableObject {
         appState?.engine.reset()
         
         if let window = lockWindow {
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.35
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                window.animator().alphaValue = 0.0
-            }, completionHandler: { [weak self] in
-                window.orderOut(nil)
-                self?.lockWindow = nil
-                self?.isMacBookLocked = false
-                self?.appState?.glyphState = .idle
-            })
+            window.orderOut(nil)
+            self.lockWindow = nil
+            self.isMacBookLocked = false
+            self.appState?.glyphState = .idle
         } else {
             isMacBookLocked = false
         }
@@ -168,9 +162,7 @@ final class ScreenLockManager: ObservableObject {
             if matched {
                 appState.glyphState = .success
                 appState.soundManager.playFaceIDSuccess()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    self.unlockMacBook()
-                }
+                // FullscreenLockScreenView.onChange triggers the slide-up animation and calls unlockMacBook
             } else {
                 appState.glyphState = .failure
                 appState.soundManager.playFaceIDFailure()
