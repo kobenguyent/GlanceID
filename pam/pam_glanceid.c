@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pwd.h>
 #include <sys/wait.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
@@ -14,12 +15,27 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
         return PAM_AUTH_ERR;
     }
 
-    // Only authenticate interactive terminals
-    if (!isatty(STDIN_FILENO) && !isatty(STDERR_FILENO)) {
-        return PAM_AUTH_ERR;
+    // Determine target username from PAM
+    const char *username = NULL;
+    pam_get_user(pamh, &username, NULL);
+
+    uid_t target_uid = getuid();
+    gid_t target_gid = getgid();
+    const char *home_dir = NULL;
+
+    if (username != NULL) {
+        struct passwd *pw = getpwnam(username);
+        if (pw != NULL) {
+            target_uid = pw->pw_uid;
+            target_gid = pw->pw_gid;
+            home_dir = pw->pw_dir;
+        }
     }
 
-    fprintf(stderr, "\033[1;36m👁️ GlanceID Face ID:\033[0m Glancing at camera...\n");
+    int is_interactive = isatty(STDERR_FILENO);
+    if (is_interactive) {
+        fprintf(stderr, "\033[1;36m👁️ GlanceID Face ID:\033[0m Glancing at camera...\n");
+    }
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -27,13 +43,13 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     }
 
     if (pid == 0) {
-        // Drop root privileges so GlanceID runs as the logged-in user
-        // (This allows accessing user TCC camera permission and local profile)
-        uid_t real_uid = getuid();
-        gid_t real_gid = getgid();
-        if (real_uid != 0) {
-            setgid(real_gid);
-            setuid(real_uid);
+        // Drop privileges to the target user so camera TCC and profile are accessible
+        if (target_uid != 0) {
+            setgid(target_gid);
+            setuid(target_uid);
+            if (home_dir != NULL) {
+                setenv("HOME", home_dir, 1);
+            }
         }
 
         execl(GLANCEID_PATH, "GlanceID", "--verify", (char *)NULL);
@@ -44,11 +60,15 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     waitpid(pid, &status, 0);
 
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        fprintf(stderr, "\033[1;32m✅ Face ID Verified!\033[0m\n");
+        if (is_interactive) {
+            fprintf(stderr, "\033[1;32m✅ Face ID Verified!\033[0m\n");
+        }
         return PAM_SUCCESS;
     }
 
-    fprintf(stderr, "\033[0;33mFace ID not matched. Falling back to password...\033[0m\n");
+    if (is_interactive) {
+        fprintf(stderr, "\033[0;33mFace ID not matched. Falling back to password...\033[0m\n");
+    }
     return PAM_AUTH_ERR;
 }
 
