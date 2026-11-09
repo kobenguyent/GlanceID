@@ -9,9 +9,17 @@
 #define GLANCEID_PATH "/Applications/GlanceID.app/Contents/MacOS/GlanceID"
 
 PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+    // Check if GlanceID application exists
     if (access(GLANCEID_PATH, X_OK) != 0) {
         return PAM_AUTH_ERR;
     }
+
+    // Only authenticate interactive terminals
+    if (!isatty(STDIN_FILENO) && !isatty(STDERR_FILENO)) {
+        return PAM_AUTH_ERR;
+    }
+
+    fprintf(stderr, "\033[1;36m👁️ GlanceID Face ID:\033[0m Glancing at camera...\n");
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -19,7 +27,15 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     }
 
     if (pid == 0) {
-        // Run GlanceID headless Face ID verification
+        // Drop root privileges so GlanceID runs as the logged-in user
+        // (This allows accessing user TCC camera permission and local profile)
+        uid_t real_uid = getuid();
+        gid_t real_gid = getgid();
+        if (real_uid != 0) {
+            setgid(real_gid);
+            setuid(real_uid);
+        }
+
         execl(GLANCEID_PATH, "GlanceID", "--verify", (char *)NULL);
         _exit(1);
     }
@@ -28,9 +44,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, cons
     waitpid(pid, &status, 0);
 
     if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        fprintf(stderr, "\033[1;32m✅ Face ID Verified!\033[0m\n");
         return PAM_SUCCESS;
     }
 
+    fprintf(stderr, "\033[0;33mFace ID not matched. Falling back to password...\033[0m\n");
     return PAM_AUTH_ERR;
 }
 
