@@ -203,6 +203,9 @@ struct FullscreenLockScreenView: View {
         case .idle:
             return "GlanceID Locked • Click to Glance"
         case .scanning:
+            if appState.requireLiveness && appState.engine.state == .analyzing {
+                return "Face Matched • Blink to Unlock"
+            }
             return "Verifying Face..."
         case .success:
             return "Unlocked"

@@ -47,6 +47,7 @@ final class AppState: ObservableObject {
     @Published var enrolledDate: Date? = nil
     @Published var threshold: Float = 0.42
     @Published var isCameraMirrored: Bool = true
+    @Published var requireLiveness: Bool = false
     
     // Vault State
     @Published var isVaultUnlocked: Bool = false
@@ -131,7 +132,7 @@ final class AppState: ObservableObject {
         isHUDActive = true
         glyphState = .scanning
         hudTitle = "GlanceID"
-        hudSubtitle = "Glance at your Mac camera..."
+        hudSubtitle = requireLiveness ? "Glance at camera & blink..." : "Glance at your Mac camera..."
         
         cameraManager.start()
         
@@ -141,7 +142,7 @@ final class AppState: ObservableObject {
             self.handleAuthenticationFailure(message: "Face ID Timed Out")
         }
         
-        engine.startAuthentication(threshold: threshold) { [weak self] success, distance, userName in
+        engine.startAuthentication(threshold: threshold, requireLiveness: requireLiveness) { [weak self] success, distance, userName in
             guard let self = self else { return }
             
             // Immediately shut off camera as soon as verification completes
@@ -242,7 +243,11 @@ final class AppState: ObservableObject {
                     hudSubtitle = "Analyzing facial geometry..."
                 }
             }
-        case .authenticated, .unrecognized, .idle, .analyzing, .noFaceDetected:
+        case .analyzing:
+            if isHUDActive && glyphState == .scanning {
+                hudSubtitle = requireLiveness ? "Face matched! Blink to confirm..." : "Analyzing facial geometry..."
+            }
+        case .authenticated, .unrecognized, .idle, .noFaceDetected:
             break
         }
     }

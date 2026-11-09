@@ -32,6 +32,10 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     @Published var isAuthenticating: Bool = false
     @Published var isEnrolling: Bool = false
     
+    // Presentation Attack / Liveness Detection
+    let livenessDetector = LivenessDetector()
+    var requireLiveness: Bool = false
+    
     private var isProcessingFrame = false
     private let processingQueue = DispatchQueue(label: "com.glanceid.visionqueue", qos: .userInitiated)
     
@@ -52,13 +56,16 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
         isAuthenticating = false
         isEnrolling = false
         currentFeaturePrint = nil
+        livenessDetector.reset()
     }
     
-    func startAuthentication(threshold: Float = 0.42, completion: @escaping (Bool, Float, String?) -> Void) {
+    func startAuthentication(threshold: Float = 0.42, requireLiveness: Bool = false, completion: @escaping (Bool, Float, String?) -> Void) {
         self.targetThreshold = threshold
+        self.requireLiveness = requireLiveness
         self.authCompletion = completion
         self.isAuthenticating = true
         self.state = .searching
+        self.livenessDetector.reset()
     }
     
     func startEnrollment(completion: @escaping (Result<VNFeaturePrintObservation, Error>) -> Void) {
@@ -115,6 +122,15 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
         
         // Extract landmarks
         let landmarkInfo = extractLandmarks(from: primaryFace, quality: captureQuality)
+        
+        // Evaluate anti-spoofing liveness if required
+        if self.requireLiveness && self.isAuthenticating {
+            _ = self.livenessDetector.processLandmarks(
+                leftEye: landmarkInfo.leftEye,
+                rightEye: landmarkInfo.rightEye,
+                nose: landmarkInfo.nose
+            )
+        }
         
         // Extract Face Feature Print for biometric comparison
         let featurePrint = extractFeaturePrint(from: pixelBuffer, faceBounds: primaryFace.boundingBox)
@@ -200,6 +216,19 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
             
             let threshold = min(stored.profile.threshold, self.targetThreshold)
             if distance <= threshold {
+                // If liveness protection is enabled, require confirmed blink / liveness
+                if self.requireLiveness && !self.livenessDetector.isLivenessConfirmed {
+                    if case .suspectStaticImage(let reason) = self.livenessDetector.state {
+                        self.isAuthenticating = false
+                        self.state = .unrecognized(distance: distance)
+                        self.authCompletion?(false, distance, "Spoof detected: \(reason)")
+                        self.authCompletion = nil
+                        return
+                    }
+                    self.state = .analyzing
+                    return
+                }
+                
                 self.isAuthenticating = false
                 self.state = .authenticated(userName: stored.profile.userName, distance: distance)
                 self.authCompletion?(true, distance, stored.profile.userName)

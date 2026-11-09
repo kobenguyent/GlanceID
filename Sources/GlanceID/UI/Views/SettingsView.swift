@@ -36,6 +36,57 @@ struct SettingsView: View {
                     .padding(8)
                 }
                 
+                // Anti-Spoofing & Liveness Protection
+                GroupBox(label: Label("Anti-Spoofing & Liveness Protection", systemImage: "shield.lefthalf.filled")) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Toggle(isOn: $appState.requireLiveness) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Require Natural Blink Challenge")
+                                    .font(.subheadline.bold())
+                                Text("Prevents 2D printed photo and static screen spoofing by requiring physiological eye blink verification.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Standard 2D Webcam Protection Techniques:")
+                                .font(.caption.bold())
+                                .foregroundColor(.primary)
+                            
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "eye.fill")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 16)
+                                Text("Eye Aspect Ratio (EAR) Blink Detection: Calculates eyelid contour dynamics to confirm live human eye motion.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "waveform.path.ecg")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 16)
+                                Text("Zero-Variance Filter: Rejects static printed photos and rigid screens with near-zero involuntary tremor.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "iphone.gen3")
+                                    .foregroundColor(.accentColor)
+                                    .frame(width: 16)
+                                Text("Apple Continuity Camera: Mount an iPhone with TrueDepth to gain genuine hardware 3D IR point-cloud security.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
+                
                 // Hardware & Device
                 GroupBox(label: Label("Hardware & Camera", systemImage: "camera.fill")) {
                     VStack(alignment: .leading, spacing: 10) {
