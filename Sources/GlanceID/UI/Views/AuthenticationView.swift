@@ -186,13 +186,13 @@ struct AuthenticationView: View {
                         appState.cancelAuthentication()
                     }
                 
-                VStack(spacing: 20) {
-                    FaceIDGlyphView(state: appState.glyphState, size: 90)
-                        .padding(.top, 8)
+                VStack(spacing: 16) {
+                    CentralFaceIDScanView(appState: appState, size: 140)
+                        .padding(.top, 4)
                     
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         Text(appState.hudTitle)
-                            .font(.system(size: 19, weight: .bold, design: .rounded))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
                         
                         Text(appState.hudSubtitle)
                             .font(.system(size: 13, weight: .regular))
@@ -208,8 +208,8 @@ struct AuthenticationView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 4)
                 }
-                .padding(28)
-                .frame(width: 280, height: 260)
+                .padding(24)
+                .frame(width: 300)
                 .background(.ultraThinMaterial)
                 .cornerRadius(24)
                 .shadow(color: .black.opacity(0.25), radius: 30, x: 0, y: 12)
