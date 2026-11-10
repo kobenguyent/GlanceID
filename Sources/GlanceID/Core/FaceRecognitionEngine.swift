@@ -36,6 +36,12 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     let livenessDetector = LivenessDetector()
     var requireLiveness: Bool = false
     
+    // Minimum pacing dwell for biometric stabilization (~350ms)
+    var minAuthenticationDwell: TimeInterval = 0.35
+    private(set) var authStartTime: Date?
+    private(set) var faceAcquiredTime: Date?
+    private var pendingAuthWorkItem: DispatchWorkItem?
+    
     private var isProcessingFrame = false
     private let processingQueue = DispatchQueue(label: "com.glanceid.visionqueue", qos: .userInitiated)
     
@@ -50,20 +56,29 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
     private var targetThreshold: Float = 0.42
     
     func reset() {
+        pendingAuthWorkItem?.cancel()
+        pendingAuthWorkItem = nil
         state = .idle
         landmarkData = nil
         lastDistance = nil
         isAuthenticating = false
         isEnrolling = false
         currentFeaturePrint = nil
+        authStartTime = nil
+        faceAcquiredTime = nil
+        authCompletion = nil
         livenessDetector.reset()
     }
     
     func startAuthentication(threshold: Float = 0.42, requireLiveness: Bool = false, completion: @escaping (Bool, Float, String?) -> Void) {
+        self.pendingAuthWorkItem?.cancel()
+        self.pendingAuthWorkItem = nil
         self.targetThreshold = threshold
         self.requireLiveness = requireLiveness
         self.authCompletion = completion
         self.isAuthenticating = true
+        self.authStartTime = Date()
+        self.faceAcquiredTime = nil
         self.state = .searching
         self.livenessDetector.reset()
     }
@@ -107,6 +122,7 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
             DispatchQueue.main.async {
                 self.landmarkData = nil
                 self.lastDistance = nil
+                self.faceAcquiredTime = nil
                 if self.isAuthenticating || self.isEnrolling {
                     self.state = .searching
                 }
@@ -137,6 +153,9 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
         let featurePrint = extractFeaturePrint(from: pixelBuffer, faceBounds: primaryFace.boundingBox)
         
         DispatchQueue.main.async {
+            if self.isAuthenticating && self.faceAcquiredTime == nil {
+                self.faceAcquiredTime = Date()
+            }
             self.landmarkData = landmarkInfo
             self.currentFeaturePrint = featurePrint
             
@@ -231,26 +250,53 @@ final class FaceRecognitionEngine: ObservableObject, CameraFrameDelegate {
                     if case .suspectStaticImage(let reason) = self.livenessDetector.state {
                         self.isAuthenticating = false
                         self.state = .unrecognized(distance: distance)
-                        self.authCompletion?(false, distance, "Spoof detected: \(reason)")
+                        let completion = self.authCompletion
                         self.authCompletion = nil
+                        completion?(false, distance, "Spoof detected: \(reason)")
                         return
                     }
                     self.state = .analyzing
                     return
                 }
                 
-                self.isAuthenticating = false
-                self.state = .authenticated(userName: stored.profile.userName, distance: distance)
-                self.authCompletion?(true, distance, stored.profile.userName)
-                self.authCompletion = nil
+                // Enforce minimum stabilization dwell (~350ms) after face acquisition
+                let acquisitionTime = self.faceAcquiredTime ?? self.authStartTime ?? Date()
+                let elapsed = Date().timeIntervalSince(acquisitionTime)
+                let remainingDwell = max(0, self.minAuthenticationDwell - elapsed)
+                
+                let matchedUserName = stored.profile.userName
+                let matchedDistance = distance
+                
+                if remainingDwell > 0.01 {
+                    self.isAuthenticating = false
+                    self.state = .tracking(quality: quality)
+                    
+                    let workItem = DispatchWorkItem { [weak self] in
+                        guard let self = self else { return }
+                        self.pendingAuthWorkItem = nil
+                        guard let completion = self.authCompletion else { return }
+                        self.state = .authenticated(userName: matchedUserName, distance: matchedDistance)
+                        self.authCompletion = nil
+                        completion(true, matchedDistance, matchedUserName)
+                    }
+                    self.pendingAuthWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + remainingDwell, execute: workItem)
+                } else {
+                    self.isAuthenticating = false
+                    self.state = .authenticated(userName: matchedUserName, distance: matchedDistance)
+                    let completion = self.authCompletion
+                    self.authCompletion = nil
+                    completion?(true, matchedDistance, matchedUserName)
+                }
             } else {
                 self.state = .tracking(quality: quality)
             }
         } catch {
             self.isAuthenticating = false
             self.state = .unrecognized(distance: 1.0)
-            self.authCompletion?(false, 1.0, nil)
+            let completion = self.authCompletion
             self.authCompletion = nil
+            completion?(false, 1.0, nil)
         }
     }
 }

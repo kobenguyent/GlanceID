@@ -41,6 +41,11 @@ final class AppState: ObservableObject {
     @Published var hudTitle: String = "GlanceID"
     @Published var hudSubtitle: String = "Simulating Face ID on macOS"
     
+    // Real-time Biometric Telemetry
+    @Published var currentLandmarks: FaceLandmarkData? = nil
+    @Published var isFaceTracked: Bool = false
+    @Published var scanQuality: Float = 0.0
+    
     // Biometric Profile & Settings
     @Published var isEnrolled: Bool = false
     @Published var enrolledName: String = ""
@@ -75,6 +80,18 @@ final class AppState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.handleEngineState(state)
+            }
+            .store(in: &cancellables)
+            
+        // Forward real-time biometric telemetry from engine
+        engine.$landmarkData
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] landmarks in
+                guard let self = self else { return }
+                self.currentLandmarks = landmarks
+                self.isFaceTracked = (landmarks != nil)
+                self.scanQuality = landmarks?.quality ?? 0.0
             }
             .store(in: &cancellables)
             
@@ -141,6 +158,9 @@ final class AppState: ObservableObject {
         glyphState = .scanning
         hudTitle = "GlanceID"
         hudSubtitle = requireLiveness ? "Glance at camera & blink..." : "Glance at your Mac camera..."
+        currentLandmarks = nil
+        isFaceTracked = false
+        scanQuality = 0.0
         
         cameraManager.start()
         
@@ -182,6 +202,9 @@ final class AppState: ObservableObject {
         cameraManager.stop()
         isHUDActive = false
         glyphState = .idle
+        currentLandmarks = nil
+        isFaceTracked = false
+        scanQuality = 0.0
         engine.reset()
     }
     
