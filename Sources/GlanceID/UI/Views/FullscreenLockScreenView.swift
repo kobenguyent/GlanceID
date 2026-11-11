@@ -233,7 +233,16 @@ struct FullscreenLockScreenView: View {
                 }
                 .offset(y: slideOffset)
                 .opacity(contentOpacity)
+                
+                // Central Apple Vision Pro Face ID Scanning Reticle HUD
+                if isPrimary && (appState.glyphState == .scanning || appState.glyphState == .success || appState.glyphState == .failure) {
+                    CentralFaceIDScanView(appState: appState, size: 160)
+                        .transition(.scale(scale: 0.85).combined(with: .opacity))
+                        .offset(y: slideOffset)
+                        .opacity(contentOpacity)
+                }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: appState.glyphState)
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
             .onChange(of: appState.glyphState) { newState in
