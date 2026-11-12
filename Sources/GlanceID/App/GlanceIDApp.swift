@@ -19,11 +19,23 @@ struct GlanceIDApp: App {
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    appState.triggerManualUpdateCheck()
+                }
+            }
+            
             CommandMenu("GlanceID") {
                 Button("Lock MacBook Screen (⌥⌘L)") {
                     ScreenLockManager.shared.lockMacBook()
                 }
                 .keyboardShortcut("l", modifiers: [.option, .command])
+                
+                Divider()
+                
+                Button("Check for Updates...") {
+                    appState.triggerManualUpdateCheck()
+                }
             }
         }
         
@@ -34,6 +46,16 @@ struct GlanceIDApp: App {
             .keyboardShortcut("l", modifiers: [.option, .command])
             
             Divider()
+            
+            if case .updateAvailable(let release, _, let latestVersion) = appState.updateManager.status {
+                Button("⬆️ Update Available (v\(latestVersion))...") {
+                    appState.updateManager.downloadPreferredAsset(for: release)
+                }
+            }
+            
+            Button("Check for Updates...") {
+                appState.triggerManualUpdateCheck()
+            }
             
             Button("Open Dashboard") {
                 NSApp.activate(ignoringOtherApps: true)
@@ -58,7 +80,18 @@ struct ContentView: View {
         NavigationSplitView {
             List(AppTab.allCases, selection: $appState.selectedTab) { tab in
                 NavigationLink(value: tab) {
-                    Label(tab.rawValue, systemImage: tab.icon)
+                    HStack {
+                        Label(tab.rawValue, systemImage: tab.icon)
+                        Spacer()
+                        if tab == .settings && appState.updateManager.status.isUpdateAvailable {
+                            Text("NEW")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.green))
+                        }
+                    }
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)

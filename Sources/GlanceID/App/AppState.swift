@@ -34,6 +34,7 @@ final class AppState: ObservableObject {
     let engine = FaceRecognitionEngine()
     let soundManager = SoundManager.shared
     let storage = BiometricStorage.shared
+    let updateManager = UpdateManager.shared
     
     // Authentication HUD state
     @Published var isHUDActive: Bool = false
@@ -66,6 +67,14 @@ final class AppState: ObservableObject {
         
         // Forward camera manager updates so views observing AppState receive camera state changes
         cameraManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+            
+        // Forward update manager changes
+        updateManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -113,6 +122,22 @@ final class AppState: ObservableObject {
             NSApplication.shared.activate(ignoringOtherApps: true)
             self?.cameraManager.requestAccess()
         }
+        
+        // Automatically check GitHub Releases for new version if enabled
+        if updateManager.autoCheckOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.updateManager.checkForUpdates()
+            }
+        }
+    }
+    
+    func triggerManualUpdateCheck() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        for window in NSApplication.shared.windows where !(window is NSPanel) {
+            window.makeKeyAndOrderFront(nil)
+        }
+        selectedTab = .settings
+        updateManager.checkForUpdates()
     }
     
     func openCameraPrivacySettings() {

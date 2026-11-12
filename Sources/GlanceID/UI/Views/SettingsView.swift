@@ -2,10 +2,68 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var updateManager = UpdateManager.shared
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // Software Update Section (GitHub Releases)
+                GroupBox(label: Label("Software Update", systemImage: "arrow.triangle.2.circlepath.circle.fill")) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 8) {
+                                    Text("GlanceID v\(updateManager.currentVersion)")
+                                        .font(.subheadline.bold())
+                                    Text("(\(updateManager.repoOwner)/\(updateManager.repoName))")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                if let lastChecked = updateManager.lastCheckedDate {
+                                    Text("Last checked: \(lastChecked.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("Checks GitHub Releases for new versions and prebuilt .dmg/.zip installers.")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            if updateManager.status == .checking {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .padding(.trailing, 6)
+                            }
+                            
+                            Button(updateManager.status == .checking ? "Checking..." : "Check for Updates") {
+                                updateManager.checkForUpdates()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(updateManager.status == .checking)
+                        }
+                        
+                        // Dynamic Update Status Banner
+                        updateStatusBanner
+                        
+                        Divider()
+                        
+                        Toggle(isOn: $updateManager.autoCheckOnLaunch) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Automatically check for updates on launch")
+                                    .font(.subheadline)
+                                Text("Queries the GitHub Releases API in the background when GlanceID starts.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
+                
                 // Biometrics Settings
                 GroupBox(label: Label("Biometrics Configuration", systemImage: "slider.horizontal.3")) {
                     VStack(alignment: .leading, spacing: 14) {
@@ -166,6 +224,112 @@ struct SettingsView: View {
                 }
             }
             .padding(24)
+        }
+    }
+    
+    @ViewBuilder
+    private var updateStatusBanner: some View {
+        switch updateManager.status {
+        case .idle, .checking:
+            EmptyView()
+            
+        case .upToDate(let currentVersion, _):
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(.green)
+                Text("GlanceID is up to date (v\(currentVersion)).")
+                    .font(.caption.bold())
+                    .foregroundColor(.primary)
+                Spacer()
+                Button("GitHub Releases") {
+                    updateManager.openRepositoryReleasesPage()
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.green.opacity(0.1)))
+            
+        case .noReleasesPublished(let currentVersion):
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.accentColor)
+                Text("Running latest version (v\(currentVersion)) — no newer GitHub releases published yet.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("View Releases") {
+                    updateManager.openRepositoryReleasesPage()
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.08)))
+            
+        case .updateAvailable(let release, let currentVersion, let latestVersion):
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.green)
+                    Text("New Version Available: v\(latestVersion)")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.primary)
+                    Text("(installed: v\(currentVersion))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                
+                if let body = release.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(body.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(4)
+                }
+                
+                HStack(spacing: 12) {
+                    Button {
+                        updateManager.downloadPreferredAsset(for: release)
+                    } label: {
+                        if let asset = release.preferredInstallerAsset {
+                            Label("Download \(asset.name)", systemImage: "arrow.down.circle.fill")
+                        } else {
+                            Label("Download Update", systemImage: "arrow.down.circle.fill")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    
+                    Button("View Release Notes on GitHub") {
+                        updateManager.openReleasePage(release)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.12)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.green.opacity(0.35), lineWidth: 1)
+            )
+            
+        case .error(let message):
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text(message)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("Open GitHub Releases") {
+                    updateManager.openRepositoryReleasesPage()
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.1)))
         }
     }
 }
