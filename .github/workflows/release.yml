@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release version tag (e.g. v1.0.0)"
+        required: true
+        default: "v1.0.0"
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish GitHub Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Release Version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RAW_TAG="${{ inputs.tag }}"
+          else
+            RAW_TAG="${GITHUB_REF_NAME}"
+          fi
+
+          # Ensure tag starts with 'v'
+          if [[ "${RAW_TAG}" != v* ]]; then
+            TAG="v${RAW_TAG}"
+          else
+            TAG="${RAW_TAG}"
+          fi
+          VERSION="${TAG#v}"
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Release Tag: ${TAG} (Version: ${VERSION})"
+
+      - name: Run Unit Test Suite
+        run: |
+          ./scripts/run_tests.sh
+
+      - name: Build GlanceID App, DMG & ZIP Artifacts
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          ./scripts/build_app.sh
+
+      - name: Compile PAM Module
+        run: |
+          clang -shared -fPIC -lpam pam/pam_glanceid.c -o pam/pam_glanceid.so
+          ditto -c -k "${PWD}/pam/pam_glanceid.so" "build/pam_glanceid-macOS.zip"
+          (
+            cd build
+            shasum -a 256 pam_glanceid-macOS.zip >> SHA256SUMS.txt
+          )
+
+      - name: Verify Release Assets
+        run: |
+          test -d "build/GlanceID.app"
+          test -f "build/GlanceID.dmg"
+          test -f "build/GlanceID.zip"
+          test -f "build/pam_glanceid-macOS.zip"
+          test -f "build/SHA256SUMS.txt"
+          cat build/SHA256SUMS.txt
+
+      - name: Prepare Release Notes Header
+        run: |
+          cat << 'EOF' > build/RELEASE_HEADER.md
+          ### 📦 Direct Downloads
+
+          | Package | Format | Description |
+          | :--- | :--- | :--- |
+          | **`GlanceID.dmg`** | **macOS Disk Image (Recommended)** | Double-click to mount and drag **GlanceID.app** into **Applications**. |
+          | **`GlanceID.zip`** | **macOS App Archive** | Double-click in Finder to extract **GlanceID.app** directly. |
+          | **`pam_glanceid-macOS.zip`** | **PAM Module** | Precompiled `pam_glanceid.so` for Terminal `sudo` Face ID. |
+          | **`SHA256SUMS.txt`** | **Checksums** | SHA-256 integrity hashes for all release packages. |
+
+          ---
+
+          ### 🚀 Quick Installation
+
+          1. Download **`GlanceID.dmg`** below and double-click to open it.
+          2. Drag **`GlanceID.app`** into the **`Applications`** folder shortcut.
+          3. **First Launch (Gatekeeper Note)**: Because GlanceID is ad-hoc signed (requiring no paid Apple Developer account), macOS flags browser-downloaded apps with quarantine. Run this command once in Terminal before opening:
+             ```bash
+             xattr -cr /Applications/GlanceID.app
+             ```
+             *(Or right-click `GlanceID.app` in Finder → choose **Open** → click **Open**).*
+          EOF
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "GlanceID ${{ steps.meta.outputs.tag }}"
+          body_path: build/RELEASE_HEADER.md
+          generate_release_notes: true
+          prerelease: ${{ inputs.prerelease == true }}
+          draft: false
+          files: |
+            build/GlanceID.dmg
+            build/GlanceID.zip
+            build/pam_glanceid-macOS.zip
+            build/SHA256SUMS.txt

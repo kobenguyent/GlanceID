@@ -7,6 +7,7 @@
   ### *Bionic Face ID for macOS — Glance to Unlock.*
 
   [![CI](https://github.com/kobenguyent/GlanceID/actions/workflows/ci.yml/badge.svg)](https://github.com/kobenguyent/GlanceID/actions/workflows/ci.yml)
+  [![Release](https://img.shields.io/github/v/release/kobenguyent/GlanceID?label=Release&logo=github)](https://github.com/kobenguyent/GlanceID/releases/latest)
   [![Platform](https://img.shields.io/badge/Platform-macOS%2013%2B-black?style=flat&logo=apple)](https://www.apple.com/macos)
   [![Architecture](https://img.shields.io/badge/Arch-Apple%20Silicon%20%7C%20Intel-blue?style=flat)](https://www.apple.com/mac)
   [![Swift](https://img.shields.io/badge/Swift-5.9%20%7C%206.0-F05138?style=flat&logo=swift&logoColor=white)](https://swift.org)
@@ -114,7 +115,23 @@ GlanceIDKit.authenticate(
 
 ## 🚀 Quick Start
 
-### Option A: Build & Install from Source (Recommended)
+### Option A: 1-Click Pre-built Download (GitHub Releases)
+
+| Installer Package | Direct Download Link | Description |
+| :--- | :--- | :--- |
+| **💿 `GlanceID.dmg`** *(Recommended)* | [**Download GlanceID.dmg**](https://github.com/kobenguyent/GlanceID/releases/latest/download/GlanceID.dmg) | Mounts with a double-click; drag `GlanceID.app` into `Applications`. |
+| **📦 `GlanceID.zip`** | [**Download GlanceID.zip**](https://github.com/kobenguyent/GlanceID/releases/latest/download/GlanceID.zip) | Packed via Apple `ditto`; double-click in Finder to extract `GlanceID.app`. |
+| **🔐 `SHA256SUMS.txt`** | [**View Checksums**](https://github.com/kobenguyent/GlanceID/releases/latest/download/SHA256SUMS.txt) | SHA-256 verification hashes for release packages. |
+
+1. Download [**`GlanceID.dmg`**](https://github.com/kobenguyent/GlanceID/releases/latest/download/GlanceID.dmg) (or visit the [GitHub Releases page](https://github.com/kobenguyent/GlanceID/releases)).
+2. Double-click `GlanceID.dmg` and drag **`GlanceID.app`** into the **`Applications`** folder shortcut.
+3. If macOS displays an ad-hoc Gatekeeper warning on first launch, strip the download quarantine flag in Terminal:
+   ```bash
+   xattr -cr /Applications/GlanceID.app
+   ```
+   *(Or right-click `GlanceID.app` in Finder $\to$ choose **Open** $\to$ click **Open**)*.
+
+### Option B: Build & Install from Source
 
 ```bash
 git clone https://github.com/kobenguyent/GlanceID.git
@@ -123,16 +140,6 @@ cd GlanceID
 ```
 
 The installer builds the app bundle in release mode, attaches camera entitlements, applies ad-hoc codesigning, strips quarantine flags, and installs directly to `/Applications/GlanceID.app`.
-
-### Option B: Download Pre-built Release (DMG)
-
-1. Download **`GlanceID.dmg`** from [Releases](https://github.com/kobenguyent/GlanceID/releases).
-2. Open `GlanceID.dmg` and drag `GlanceID.app` into `/Applications`.
-3. If macOS displays an ad-hoc Gatekeeper warning on first launch, strip the download flag in Terminal:
-   ```bash
-   xattr -cr /Applications/GlanceID.app
-   ```
-   *(Or right-click `GlanceID.app` in Finder $\to$ choose **Open** $\to$ click **Open**)*.
 
 ---
 
