@@ -16,6 +16,7 @@ struct FullscreenLockScreenView: View {
     @State private var slideOffset: CGFloat = 0.0
     @State private var contentOpacity: Double = 1.0
     @State private var wallpaperBlur: CGFloat = 8.0
+    @FocusState private var isPasswordFieldFocused: Bool
     @State private var timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     
     var body: some View {
@@ -149,6 +150,7 @@ struct FullscreenLockScreenView: View {
                             // Fallback Password input
                             HStack(spacing: 8) {
                                 SecureField("Enter Password", text: $passwordInput)
+                                    .focused($isPasswordFieldFocused)
                                     .textFieldStyle(.plain)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 7)
@@ -169,9 +171,14 @@ struct FullscreenLockScreenView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                ScreenLockManager.shared.focusPrimaryLockWindow()
+                                isPasswordFieldFocused = true
+                            }
                             .overlay(
                                 RoundedRectangle(cornerRadius: 18)
-                                    .stroke(showPasswordError ? Color.red : Color.white.opacity(0.25), lineWidth: 1)
+                                    .stroke(showPasswordError ? Color.red : (isPasswordFieldFocused ? Color.white.opacity(0.55) : Color.white.opacity(0.25)), lineWidth: 1)
                             )
                             
                             // Face ID Trigger Button
@@ -237,6 +244,7 @@ struct FullscreenLockScreenView: View {
                 // Central Apple Vision Pro Face ID Scanning Reticle HUD
                 if isPrimary && (appState.glyphState == .scanning || appState.glyphState == .success || appState.glyphState == .failure) {
                     CentralFaceIDScanView(appState: appState, size: 160)
+                        .allowsHitTesting(false)
                         .transition(.scale(scale: 0.85).combined(with: .opacity))
                         .offset(y: slideOffset)
                         .opacity(contentOpacity)
@@ -245,9 +253,20 @@ struct FullscreenLockScreenView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.75), value: appState.glyphState)
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
+            .onAppear {
+                if isPrimary {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        ScreenLockManager.shared.focusPrimaryLockWindow()
+                        isPasswordFieldFocused = true
+                    }
+                }
+            }
             .onChange(of: appState.glyphState) { newState in
                 if newState == .success && !isSlidingUp {
                     performSlideUpUnlock(screenHeight: geo.size.height)
+                } else if isPrimary && (newState == .failure || newState == .idle) {
+                    ScreenLockManager.shared.focusPrimaryLockWindow()
+                    isPasswordFieldFocused = true
                 }
             }
         }
@@ -294,6 +313,7 @@ struct FullscreenLockScreenView: View {
     
     private func handlePasswordSubmit() {
         if !passwordInput.isEmpty || !appState.isEnrolled {
+            ScreenLockManager.shared.cancelActiveGlanceScan()
             appState.soundManager.playFaceIDSuccess()
             withAnimation {
                 appState.glyphState = .success
@@ -301,6 +321,7 @@ struct FullscreenLockScreenView: View {
         } else {
             showPasswordError = true
             appState.soundManager.playFaceIDFailure()
+            isPasswordFieldFocused = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 showPasswordError = false
             }

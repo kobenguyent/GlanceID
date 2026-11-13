@@ -2,6 +2,12 @@ import Foundation
 import AppKit
 import SwiftUI
 
+/// Borderless NSWindow subclass that allows becoming key and main window so text/password fields can receive keyboard input
+final class KeyableLockWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 final class ScreenLockManager: ObservableObject {
     static let shared = ScreenLockManager()
     
@@ -134,15 +140,30 @@ final class ScreenLockManager: ObservableObject {
         }
         
         // Focus the primary screen window for keyboard and password input
-        if let primaryWindow = lockWindows.first(where: { ($0.screen ?? NSScreen.main) == primaryScreen }) {
-            primaryWindow.makeKeyAndOrderFront(nil)
-        }
-        
+        focusPrimaryLockWindow()
+    }
+    
+    func focusPrimaryLockWindow() {
         NSApp.activate(ignoringOtherApps: true)
+        let primaryScreen = NSScreen.main ?? NSScreen.screens.first
+        if let primaryWindow = lockWindows.first(where: { ($0.screen ?? NSScreen.main) == primaryScreen }) ?? lockWindows.first {
+            primaryWindow.makeKeyAndOrderFront(nil)
+            primaryWindow.makeMain()
+        }
+    }
+    
+    func cancelActiveGlanceScan() {
+        glanceTimeoutItem?.cancel()
+        glanceTimeoutItem = nil
+        appState?.cameraManager.stop()
+        appState?.engine.reset()
+        if appState?.glyphState == .scanning {
+            appState?.glyphState = .idle
+        }
     }
     
     private func createLockWindow(for screen: NSScreen, isPrimary: Bool, appState: AppState) -> NSWindow {
-        let window = NSWindow(
+        let window = KeyableLockWindow(
             contentRect: screen.frame,
             styleMask: [.borderless],
             backing: .buffered,
@@ -206,6 +227,7 @@ final class ScreenLockManager: ObservableObject {
                 appState.cameraManager.stop()
                 appState.engine.reset()
                 appState.glyphState = .failure
+                self.focusPrimaryLockWindow()
                 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     if self.isMacBookLocked && appState.glyphState == .failure {
@@ -233,6 +255,7 @@ final class ScreenLockManager: ObservableObject {
             } else {
                 appState.glyphState = .failure
                 appState.soundManager.playFaceIDFailure()
+                self.focusPrimaryLockWindow()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     if self.isMacBookLocked {
                         appState.glyphState = .idle

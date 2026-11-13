@@ -80,4 +80,16 @@ final class FullscreenLockScreenViewTests: XCTestCase {
         let view = AuthenticationView(appState: appState)
         XCTAssertNotNil(view)
     }
+
+    func testKeyableLockWindowAllowsKeyboardInputWhenBorderless() {
+        let rect = NSRect(x: 0, y: 0, width: 800, height: 600)
+        let window = KeyableLockWindow(
+            contentRect: rect,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: true
+        )
+        XCTAssertTrue(window.canBecomeKey, "Borderless lock screen window must allow becoming key window for password input")
+        XCTAssertTrue(window.canBecomeMain, "Borderless lock screen window must allow becoming main window")
+    }
 }
